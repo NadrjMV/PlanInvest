@@ -43,7 +43,11 @@ let state = {
   goals: [],
   entries: [],
   subscriptions: [],
-  user: { name: "Planner", email: "" }
+  user: { name: "Planner", email: "" },
+  ui: { 
+    selectedDate: new Date(), // Data atual para filtro
+    privacyMode: localStorage.getItem("lp_privacy") === "true" // Lembra da escolha
+  }
 };
 
 let currentUser = null;
@@ -138,13 +142,12 @@ async function fetchUserData(user) {
   const goalsSnap = await getDocs(goalsRef);
   state.goals = goalsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-  // 4. Fetch Subscriptions (Recorrência) - NOVO
+  // 4. Fetch Subscriptions
   const subsRef = collection(db, "users", user.uid, "subscriptions");
   const subsSnap = await getDocs(subsRef);
   state.subscriptions = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   renderApp();
-  checkRecurringEntries(); // Verifica se precisa lançar algo hoje
 }
 
 // --- LOGIC: RECORRÊNCIA AUTOMÁTICA ---
@@ -340,13 +343,21 @@ function renderSparkline(entries) {
   container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="width:100%;height:100%"><defs><linearGradient id="grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#06b6d4" stop-opacity="0.5"/><stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/></linearGradient></defs><path d="M0,${height} ${points} L${width},${height} Z" fill="url(#grad)"/><polyline points="${points}" fill="none" stroke="#06b6d4" stroke-width="2"/></svg>`;
 }
 
-function renderLists(entries, goals, goalsProgress) {
+function renderLists(monthlyEntries, allEntries, goals) {
   const goalsEl = selectors("goalsList");
-  const recentEl = selectors("recentEntries");
   const goalsFull = selectors("goalsFullList");
-  const entriesEl = selectors("entriesList");
-  
-  // --- RENDERIZAR METAS ---
+  const recentEl = selectors("recentEntries"); // Home (Resumo Global)
+  const entriesEl = selectors("entriesList");  // Aba Lançamentos (Mês Selecionado)
+
+  // --- 1. RENDER GOALS ---
+  // Calculamos o progresso com BASE EM TUDO (allEntries), pois metas são longo prazo
+  const goalsProgress = new Map();
+  allEntries.forEach(e => {
+      if(e.goalId && e.assetClass !== "Despesa") {
+        goalsProgress.set(e.goalId, (goalsProgress.get(e.goalId) || 0) + Number(e.amount));
+      }
+  });
+
   if (goalsEl) {
     const createGoalHTML = (g) => {
       const current = goalsProgress.get(g.id) || 0;
@@ -375,7 +386,6 @@ function renderLists(entries, goals, goalsProgress) {
     goalsEl.innerHTML = goalsHtml;
     if(goalsFull) goalsFull.innerHTML = goals.map(createGoalHTML).join("");
     
-    // Listeners para deletar metas
     document.querySelectorAll('.action-del-goal').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -384,18 +394,15 @@ function renderLists(entries, goals, goalsProgress) {
     });
   }
 
-  // --- RENDERIZAR LANÇAMENTOS ---
-  const sortedEntries = [...entries].sort((a,b) => new Date(b.date) - new Date(a.date));
-  
+  // --- 2. RENDER ENTRIES (HELPER) ---
   const createEntryHTML = (e) => {
     const inst = state.institutions.find(i => i.id === e.institutionId);
     const isExpense = e.assetClass === "Despesa";
     const color = isExpense ? "#ef4444" : "#22c55e";
     const icon = isExpense ? "ph-arrow-up-right" : "ph-arrow-down-left";
-    
-    // Descrição especial para recorrentes
     const desc = e.isRecurring ? `<i class="ph ph-arrows-clockwise"></i> ${e.description}` : (e.description || "Aporte");
     
+    // NOTA: Adicionei a classe 'money-value' abaixo para o efeito de blur
     return `
       <div class="list-item">
         <div class="item-left">
@@ -404,20 +411,27 @@ function renderLists(entries, goals, goalsProgress) {
           </div>
           <div class="item-info">
             <h4>${desc}</h4>
-            <p>${inst?.name || "Caixa"} • ${new Date(e.date).toLocaleDateString('pt-BR')}</p>
+            <p>${inst?.name || "Caixa"} • ${new Date(e.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</p>
           </div>
         </div>
         <div style="display:flex; align-items:center;">
-          <div class="item-value" style="color: ${color}">${isExpense ? '-' : ''}${formatCurrency(Number(e.amount))}</div>
+          <div class="item-value money-value" style="color: ${color}">
+            ${isExpense ? '-' : ''}${formatCurrency(Number(e.amount))}
+          </div>
           <button data-id="${e.id}" class="delete-btn action-delete"><i class="ph ph-trash"></i></button>
         </div>
       </div>`;
   };
 
-  if(recentEl) recentEl.innerHTML = sortedEntries.slice(0, 5).map(createEntryHTML).join("") || "<p class='text-muted small'>Sem lançamentos.</p>";
-  if(entriesEl) entriesEl.innerHTML = sortedEntries.map(createEntryHTML).join("");
+  // Lista HOME: Mostra os 5 últimos globais (independente do mês)
+  const sortedAll = [...allEntries].sort((a,b) => new Date(b.date) - new Date(a.date));
+  if(recentEl) recentEl.innerHTML = sortedAll.slice(0, 5).map(createEntryHTML).join("") || "<p class='text-muted small'>Sem lançamentos.</p>";
 
-  // Listeners para deletar lançamentos
+  // Lista ABA ENTRIES: Mostra TODOS do MÊS SELECIONADO
+  const sortedMonthly = [...monthlyEntries].sort((a,b) => new Date(b.date) - new Date(a.date));
+  if(entriesEl) entriesEl.innerHTML = sortedMonthly.map(createEntryHTML).join("") || "<p class='text-muted center-text'>Nenhum lançamento neste mês.</p>";
+
+  // Re-attach listeners
   document.querySelectorAll('.action-delete').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -491,50 +505,101 @@ function hydrateProfile() {
   form.mainGoalDeadline.value = state.profile.mainGoalDeadline || "";
 }
 
+// --- FUNÇÕES DE PRIVACIDADE ---
+function togglePrivacy() {
+  state.ui.privacyMode = !state.ui.privacyMode;
+  localStorage.setItem("lp_privacy", state.ui.privacyMode);
+  applyPrivacyUI();
+}
+
+function applyPrivacyUI() {
+  const btn = selectors("togglePrivacy");
+  if (state.ui.privacyMode) {
+    document.body.classList.add("privacy-active");
+    if(btn) btn.innerHTML = '<i class="ph ph-eye-slash"></i>';
+  } else {
+    document.body.classList.remove("privacy-active");
+    if(btn) btn.innerHTML = '<i class="ph ph-eye"></i>';
+  }
+}
+
+// --- FUNÇÕES DE DATA ---
+function updateMonthDisplay() {
+  const label = selectors("currentMonthLabel");
+  if(label) {
+    // Ex: "Dezembro 2025"
+    const display = state.ui.selectedDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    label.textContent = display.charAt(0).toUpperCase() + display.slice(1);
+  }
+}
+
+function changeMonth(delta) {
+  state.ui.selectedDate.setMonth(state.ui.selectedDate.getMonth() + delta);
+  updateMonthDisplay();
+  renderApp(); // Re-renderiza tudo com o novo filtro
+}
+
 function renderApp() {
-  const entries = state.entries || [];
+  const allEntries = state.entries || [];
   
-  // Calcula Saldo Total
-  const total = entries.reduce((acc, e) => {
+  // --- 1. FILTRO DE DATA (CORRIGIDO: COMPARAÇÃO POR TEXTO) ---
+  // Gera "2025-12" baseado no selecionado
+  const year = state.ui.selectedDate.getFullYear();
+  const month = String(state.ui.selectedDate.getMonth() + 1).padStart(2, '0');
+  const targetStr = `${year}-${month}`; // Ex: "2025-12"
+
+  // Filtra: "A data do lançamento COMEÇA com 2025-12?"
+  const monthlyEntries = allEntries.filter(e => e.date.startsWith(targetStr));
+
+  // --- 2. CÁLCULOS GLOBAIS (SALDO TOTAL REAL) ---
+  // Soma TUDO, independente do mês (Patrimônio Acumulado)
+  const globalTotal = allEntries.reduce((acc, e) => {
+      // Se AssetClass for "Despesa", subtrai. Se não (Receita/Invest), soma.
       if(e.assetClass === "Despesa") return acc - Number(e.amount);
       return acc + Number(e.amount);
   }, 0);
-  
+
+  // --- 3. CÁLCULOS MENSAIS (PARA OS GRÁFICOS) ---
   const byClass = {};
   const byInst = {};
-  const goalProgress = new Map();
   
-  entries.forEach(e => {
+  monthlyEntries.forEach(e => {
     const val = Number(e.amount);
-    // Donut charts usam valor absoluto pra mostrar proporção
     byClass[e.assetClass] = (byClass[e.assetClass] || 0) + val;
     byInst[e.institutionId] = (byInst[e.institutionId] || 0) + val;
-    if(e.goalId && e.assetClass !== "Despesa") goalProgress.set(e.goalId, (goalProgress.get(e.goalId) || 0) + val);
   });
 
-  if(selectors("totalBalance")) selectors("totalBalance").textContent = formatCurrency(total);
+  // --- RENDERIZAÇÃO DA UI ---
+  if(selectors("totalBalance")) selectors("totalBalance").textContent = formatCurrency(globalTotal);
+  
   const displayName = state.user?.name?.split(" ")[0] || "Planner";
   if(selectors("userGreeting")) selectors("userGreeting").textContent = displayName;
   if(selectors("headerAvatar")) selectors("headerAvatar").textContent = displayName.charAt(0).toUpperCase();
 
-  renderSparkline(entries);
+  // Gráficos e Listas
+  renderSparkline(allEntries); // Sparkline mostra histórico completo
   renderDonut("classPie", byClass);
   renderDonut("institutionPie", byInst);
-  renderLists(entries, state.goals || [], goalProgress);
+  
+  // Passamos a lista FILTRADA (monthly) para a aba de lançamentos
+  // Passamos a lista COMPLETA (all) para o histórico recente da home e cálculo de metas
+  renderLists(monthlyEntries, allEntries, state.goals || []);
+  
   renderInstitutions();
-  renderSubscriptions(); // Renderiza nova aba
+  renderSubscriptions(); // Apenas lista, sem lógica de desconto
   hydrateProfile();
 
+  // Dropdowns
   const instSelect = selectors("entryInstitution");
   const goalSelect = selectors("entryGoal");
-  const bindSelect = selectors("primaryGoalSelect");
   
   if (instSelect) instSelect.innerHTML = state.institutions.map(i => `<option value="${i.id}">${i.name}</option>`).join("");
   const goalOpts = state.goals.map(g => `<option value="${g.id}">${g.name}</option>`).join("");
-  if (goalSelect) goalSelect.innerHTML = `<option value="">Apenas guardar (Sem meta)</option>` + goalOpts;
-  if (bindSelect) bindSelect.innerHTML = `<option value="">Selecionar...</option>` + goalOpts;
-  
+  if (goalSelect) goalSelect.innerHTML = `<option value="">Nenhuma</option>` + goalOpts;
+
   checkOnboarding();
+  applyPrivacyUI();
+  updateMonthDisplay();
 }
 
 function checkOnboarding() {
@@ -703,6 +768,7 @@ function setupAuth() {
   });
 }
 
+// 1. MANTENHA O SEU setupNavigation (Gerencia Telas)
 function setupNavigation() {
   const buttons = document.querySelectorAll(".nav-item, .nav-fab");
   buttons.forEach(btn => {
@@ -715,7 +781,7 @@ function setupNavigation() {
     });
   });
 
-  // NOVO: Clique no Header abre o perfil
+  // Clique no Header abre o perfil
   const profileTrigger = selectors("profileTrigger");
   if(profileTrigger) {
     profileTrigger.addEventListener("click", () => {
@@ -724,6 +790,22 @@ function setupNavigation() {
       selectors("profile").classList.add("active");
     });
   }
+}
+
+// 2. CRIE ESSA NOVA FUNÇÃO (Gerencia Ações de UI: Privacidade e Mês)
+function setupUIListeners() {
+  // Toggle Privacy (Olhinho)
+  const privacyBtn = selectors("togglePrivacy");
+  if(privacyBtn) {
+    privacyBtn.addEventListener("click", togglePrivacy);
+  }
+
+  // Navegação de Meses
+  const prevBtn = selectors("prevMonth");
+  const nextBtn = selectors("nextMonth");
+
+  if(prevBtn) prevBtn.addEventListener("click", () => changeMonth(-1));
+  if(nextBtn) nextBtn.addEventListener("click", () => changeMonth(1));
 }
 
 async function removeGoal(id) {
@@ -754,6 +836,7 @@ async function removeGoal(id) {
 
 function init() {
   setupNavigation();
+  setupUIListeners();
   setupForms();
   setupAuth();
   setupOnboarding();
@@ -763,7 +846,8 @@ function init() {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         currentUser = user;
-        await fetchUserData(user);
+        // Carrega dados, mas NÃO roda mais a verificação automática
+        await fetchUserData(user); 
         selectors("authModal").style.display = "none";
       } else {
         selectors("authModal").style.display = "grid";
