@@ -85,6 +85,9 @@
           <span class="status-badge" id="tierBadge">Nível 1</span>
         </div>
       </div>
+      <button id="togglePrivacy" class="icon-btn" style="margin-left: auto; margin-right: 10px;">
+        <i class="ph ph-eye"></i>
+      </button>
       <button id="logoutBtn" class="icon-btn" aria-label="Sair">
         <i class="ph ph-sign-out"></i>
       </button>
@@ -138,7 +141,13 @@
           <h3>Últimas Movimentações</h3>
           <a href="#" data-section="entries" class="link-btn">Ver todas</a>
         </div>
+        <div class="month-selector">
+            <button id="prevMonth"><i class="ph ph-caret-left"></i></button>
+            <span id="currentMonthLabel">Dezembro 2025</span>
+            <button id="nextMonth"><i class="ph ph-caret-right"></i></button>
+        </div>
         <div id="recentEntries" class="vertical-list"></div>
+        
       </section>
 
       <section id="profile" class="screen">
@@ -226,7 +235,7 @@
           <button class="add-btn-mini" id="toggleSubForm"><i class="ph ph-plus"></i></button>
         </div>
 
-        <p class="section-desc">O sistema lançará essas contas automaticamente todo mês.</p>
+        <p class="section-desc">Esta página é apenas para visualização dos gastos fixos.</p>
 
         <div id="subFormCard" class="glass-card form-wrapper hidden-panel">
           <form id="subForm">
