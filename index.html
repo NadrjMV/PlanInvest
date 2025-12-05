@@ -4,8 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#05060a" />
+  
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
   <title>LifePlan Finance OS</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,6 +23,25 @@
     <div class="blob blob-3"></div>
   </div>
 
+  <div id="toast" class="toast">
+    <i id="toastIcon" class="ph ph-check-circle"></i>
+    <span id="toastMessage">Sucesso!</span>
+  </div>
+
+  <div id="confirmModal" class="modal-overlay hidden">
+    <div class="modal-card glass-card">
+      <div class="modal-icon warning">
+        <i class="ph ph-warning"></i>
+      </div>
+      <h3 id="confirmTitle">Tem certeza?</h3>
+      <p id="confirmMessage">Essa ação não pode ser desfeita.</p>
+      <div class="modal-actions">
+        <button id="btnCancel" class="btn-secondary">Cancelar</button>
+        <button id="btnConfirm" class="btn-danger">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="onboardingModal" class="onboarding-overlay hidden">
     <div class="onboarding-card glass-card">
       <div class="step active" id="step1">
@@ -30,7 +52,7 @@
           <input type="text" id="obGoalName" placeholder="Ex: Moto, Casa, Aposentadoria" class="clean-input big-text" />
         </div>
         <div class="input-group">
-          <input type="number" id="obGoalTarget" placeholder="Valor alvo (R$)" class="clean-input big-text" />
+          <input type="text" id="obGoalTarget" placeholder="Valor alvo (R$)" class="clean-input big-text money-mask" inputmode="numeric" />
         </div>
         <button class="action-btn full" id="btnStep1">Próximo</button>
       </div>
@@ -41,11 +63,11 @@
         <p>Para calcular suas faixas, precisamos saber sua base.</p>
         <div class="input-group">
           <label>Renda Mensal</label>
-          <input type="number" id="obIncome" placeholder="R$ 0,00" class="clean-input" />
+          <input type="text" id="obIncome" placeholder="R$ 0,00" class="clean-input money-mask" inputmode="numeric" />
         </div>
         <div class="input-group">
-          <label>Despesas Fixas</label>
-          <input type="number" id="obExpenses" placeholder="R$ 0,00" class="clean-input" />
+          <label>Despesas Fixas (Estimativa)</label>
+          <input type="text" id="obExpenses" placeholder="R$ 0,00" class="clean-input money-mask" inputmode="numeric" />
         </div>
         <button class="action-btn full" id="btnFinishOnboarding">Começar Jornada</button>
       </div>
@@ -54,7 +76,7 @@
 
   <div class="app-shell">
     <header class="mobile-header">
-      <div class="user-info">
+      <div class="user-info" id="profileTrigger" style="cursor: pointer;">
         <div class="avatar-ring">
           <div class="user-avatar" id="headerAvatar">👤</div>
         </div>
@@ -133,14 +155,14 @@
                 <label>Renda Mensal</label>
                 <div class="styled-input-wrapper">
                   <i class="ph ph-arrow-up-right text-success"></i>
-                  <input type="number" name="income" placeholder="0,00" required />
+                  <input type="text" name="income" placeholder="0,00" class="money-mask" inputmode="numeric" required />
                 </div>
               </div>
               <div class="input-box">
-                <label>Despesas Fixas</label>
+                <label>Teto de Gastos</label>
                 <div class="styled-input-wrapper">
                   <i class="ph ph-arrow-down-right text-danger"></i>
-                  <input type="number" name="expenses" placeholder="0,00" required />
+                  <input type="text" name="expenses" placeholder="0,00" class="money-mask" inputmode="numeric" required />
                 </div>
               </div>
             </div>
@@ -152,17 +174,11 @@
             </div>
             <div class="input-group">
               <label>Valor Alvo</label>
-              <input type="number" name="mainGoalTarget" placeholder="0,00" class="clean-input" />
+              <input type="text" name="mainGoalTarget" placeholder="0,00" class="clean-input money-mask" inputmode="numeric" />
             </div>
             <div class="input-group">
               <label>Prazo</label>
               <input type="date" name="mainGoalDeadline" class="clean-input" />
-            </div>
-            <div class="input-group">
-              <label>Vincular Meta</label>
-              <select name="primaryGoalId" id="primaryGoalSelect" class="clean-input">
-                <option value="">Selecionar...</option>
-              </select>
             </div>
             <button type="submit" class="action-btn full">Salvar Alterações</button>
           </form>
@@ -204,6 +220,47 @@
         <div id="institutionsList" class="cards-list"></div>
       </section>
 
+      <section id="subscriptions" class="screen">
+        <div class="header-row">
+          <h2 class="page-title">Contas Fixas</h2>
+          <button class="add-btn-mini" id="toggleSubForm"><i class="ph ph-plus"></i></button>
+        </div>
+
+        <p class="section-desc">O sistema lançará essas contas automaticamente todo mês.</p>
+
+        <div id="subFormCard" class="glass-card form-wrapper hidden-panel">
+          <form id="subForm">
+            <div class="input-group">
+              <label>Nome da Conta</label>
+              <input type="text" name="name" placeholder="Ex: Netflix, Aluguel" required class="clean-input" />
+            </div>
+            <div class="input-group">
+              <label>Valor Mensal</label>
+              <input type="text" name="amount" placeholder="R$ 0,00" required class="clean-input money-mask" inputmode="numeric" />
+            </div>
+            <div class="row-2">
+              <div class="input-group">
+                <label>Dia do Vencimento</label>
+                <input type="number" name="day" placeholder="Dia (1-31)" min="1" max="31" required class="clean-input" />
+              </div>
+              <div class="input-group">
+                <label>Categoria</label>
+                <select name="category" class="clean-input">
+                  <option>Moradia</option>
+                  <option>Assinaturas</option>
+                  <option>Educação</option>
+                  <option>Transporte</option>
+                  <option>Lazer</option>
+                </select>
+              </div>
+            </div>
+            <button type="submit" class="action-btn full">Ativar Recorrência</button>
+          </form>
+        </div>
+
+        <div id="subsList" class="cards-list"></div>
+      </section>
+
       <section id="goals" class="screen">
         <div class="header-row">
           <h2 class="page-title">Meus Sonhos</h2>
@@ -216,7 +273,7 @@
               <input type="text" name="name" placeholder="Nome da Meta" required class="clean-input" />
             </div>
             <div class="input-group">
-              <input type="number" name="target" placeholder="Valor Alvo" required class="clean-input" />
+              <input type="text" name="target" placeholder="Valor Alvo" required class="clean-input money-mask" inputmode="numeric" />
             </div>
             <div class="row-2">
               <input type="date" name="due" class="clean-input" />
@@ -234,34 +291,34 @@
       </section>
 
       <section id="entries" class="screen">
-        <h2 class="page-title center-text">Novo Aporte</h2>
+        <h2 class="page-title center-text">Novo Lançamento</h2>
         
         <form id="entryForm" class="entry-form-modern">
           <div class="money-input-wrapper">
-            <span class="currency-symbol">R$</span>
-            <input type="number" name="amount" placeholder="0,00" required step="0.01" class="money-input" />
+            <input type="text" name="amount" placeholder="R$ 0,00" required class="money-input money-mask" id="moneyInput" inputmode="numeric" />
           </div>
 
           <div class="glass-card form-wrapper">
             <div class="input-group">
-              <label>Onde você investiu?</label>
+              <input type="text" name="description" placeholder="Descrição (Ex: Jantar)" class="clean-input" id="entryDescInput" />
+            </div>
+
+            <div class="input-group">
+              <label>Conta de Saída/Entrada</label>
               <select name="institutionId" id="entryInstitution" required class="clean-input"></select>
             </div>
 
             <div class="row-2">
               <div class="input-group">
                 <label>Data</label>
-                <input type="date" name="date" required class="clean-input" />
+                <input type="date" name="date" required class="clean-input" id="entryDateInput" />
               </div>
               <div class="input-group">
                 <label>Tipo</label>
-                <select name="assetClass" class="clean-input">
-                  <option>Caixa</option>
-                  <option>Renda Fixa</option>
-                  <option>FIIs</option>
-                  <option>Ações</option>
-                  <option>Cripto</option>
-                  <option>Exterior</option>
+                <select name="assetClass" id="assetClassInput" class="clean-input">
+                  <option value="Despesa">Despesa 💸</option>
+                  <option value="Receita">Receita 💰</option>
+                  <option value="Investimento">Investimento 📈</option>
                 </select>
               </div>
             </div>
@@ -269,15 +326,11 @@
             <div class="input-group">
               <label>Vincular a uma meta (opcional)</label>
               <select name="goalId" id="entryGoal" class="clean-input">
-                <option value="">Apenas guardar (Sem meta)</option>
+                <option value="">Nenhuma</option>
               </select>
             </div>
 
-            <div class="input-group">
-              <input type="text" name="description" placeholder="Descrição (Ex: Dividendo XP)" class="clean-input" />
-            </div>
-
-            <button type="submit" class="action-btn full pulse">Confirmar Aporte</button>
+            <button type="submit" class="action-btn full pulse">Confirmar</button>
           </div>
         </form>
 
@@ -294,22 +347,26 @@
         <i class="ph ph-squares-four"></i>
         <span>Home</span>
       </button>
+      
       <button class="nav-item" data-section="institutions">
         <i class="ph ph-bank"></i>
         <span>Contas</span>
       </button>
+      
       <div class="nav-fab-wrapper">
         <button class="nav-fab" data-section="entries">
           <i class="ph ph-plus"></i>
         </button>
       </div>
+
+      <button class="nav-item" data-section="subscriptions">
+        <i class="ph ph-arrows-clockwise"></i>
+        <span>Fixos</span>
+      </button>
+      
       <button class="nav-item" data-section="goals">
         <i class="ph ph-target"></i>
         <span>Metas</span>
-      </button>
-      <button class="nav-item" data-section="profile">
-        <i class="ph ph-user"></i>
-        <span>Perfil</span>
       </button>
     </nav>
   </div>
