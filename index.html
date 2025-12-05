@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#05060a" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>LifePlan Finance OS</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+  <div class="background-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div id="onboardingModal" class="onboarding-overlay hidden">
+    <div class="onboarding-card glass-card">
+      <div class="step active" id="step1">
+        <div class="step-icon">🎯</div>
+        <h2>Qual seu foco principal?</h2>
+        <p>Defina seu objetivo número 1 agora.</p>
+        <div class="input-group">
+          <input type="text" id="obGoalName" placeholder="Ex: Moto, Casa, Aposentadoria" class="clean-input big-text" />
+        </div>
+        <div class="input-group">
+          <input type="number" id="obGoalTarget" placeholder="Valor alvo (R$)" class="clean-input big-text" />
+        </div>
+        <button class="action-btn full" id="btnStep1">Próximo</button>
+      </div>
+      
+      <div class="step" id="step2">
+        <div class="step-icon">💸</div>
+        <h2>Vamos falar de grana</h2>
+        <p>Para calcular suas faixas, precisamos saber sua base.</p>
+        <div class="input-group">
+          <label>Renda Mensal</label>
+          <input type="number" id="obIncome" placeholder="R$ 0,00" class="clean-input" />
+        </div>
+        <div class="input-group">
+          <label>Despesas Fixas</label>
+          <input type="number" id="obExpenses" placeholder="R$ 0,00" class="clean-input" />
+        </div>
+        <button class="action-btn full" id="btnFinishOnboarding">Começar Jornada</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <header class="mobile-header">
+      <div class="user-info">
+        <div class="avatar-ring">
+          <div class="user-avatar" id="headerAvatar">👤</div>
+        </div>
+        <div class="texts">
+          <span class="greeting">Olá, <strong id="userGreeting">Planner</strong></span>
+          <span class="status-badge" id="tierBadge">Nível 1</span>
+        </div>
+      </div>
+      <button id="logoutBtn" class="icon-btn" aria-label="Sair">
+        <i class="ph ph-sign-out"></i>
+      </button>
+    </header>
+
+    <main class="content-area">
+      <section id="dashboard" class="screen active">
+        <div class="balance-card glass-card">
+          <span class="label">Patrimônio Líquido</span>
+          <h1 id="totalBalance">R$ 0,00</h1>
+          <div class="mini-chart" id="sparkline"></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="widget glass-card">
+            <div class="widget-head">
+              <span class="widget-title">Alocação</span>
+              <i class="ph ph-chart-pie-slice icon-accent"></i>
+            </div>
+            <div class="donut-chart-wrapper">
+              <div id="classPie" class="donut-chart"></div>
+              <div class="donut-hole"></div>
+            </div>
+            <div class="widget-legend">
+              <small>Por classe</small>
+            </div>
+          </div>
+          
+          <div class="widget glass-card">
+            <div class="widget-head">
+              <span class="widget-title">Carteiras</span>
+              <i class="ph ph-wallet icon-accent-2"></i>
+            </div>
+            <div class="donut-chart-wrapper">
+              <div id="institutionPie" class="donut-chart"></div>
+              <div class="donut-hole"></div>
+            </div>
+            <div class="widget-legend">
+              <small>Por conta</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">
+          <h3>Metas Ativas</h3>
+          <a href="#" data-section="goals" class="link-btn">Ver todas</a>
+        </div>
+        <div id="goalsList" class="vertical-list"></div>
+
+        <div class="section-title">
+          <h3>Últimas Movimentações</h3>
+          <a href="#" data-section="entries" class="link-btn">Ver todas</a>
+        </div>
+        <div id="recentEntries" class="vertical-list"></div>
+      </section>
+
+      <section id="profile" class="screen">
+        <h2 class="page-title">Meu Perfil</h2>
+        <div class="glass-card form-wrapper">
+          <form id="profileForm">
+            <div class="input-group">
+              <label>Seu Nome</label>
+              <input type="text" name="userName" placeholder="Como quer ser chamado?" class="clean-input" />
+            </div>
+
+            <div class="profile-grid">
+              <div class="input-box">
+                <label>Renda Mensal</label>
+                <div class="styled-input-wrapper">
+                  <i class="ph ph-arrow-up-right text-success"></i>
+                  <input type="number" name="income" placeholder="0,00" required />
+                </div>
+              </div>
+              <div class="input-box">
+                <label>Despesas Fixas</label>
+                <div class="styled-input-wrapper">
+                  <i class="ph ph-arrow-down-right text-danger"></i>
+                  <input type="number" name="expenses" placeholder="0,00" required />
+                </div>
+              </div>
+            </div>
+
+            <div class="divider">Objetivo Principal</div>
+            <div class="input-group">
+              <label>Nome do Objetivo</label>
+              <input type="text" name="mainGoalName" placeholder="Ex: Liberdade Financeira" class="clean-input" />
+            </div>
+            <div class="input-group">
+              <label>Valor Alvo</label>
+              <input type="number" name="mainGoalTarget" placeholder="0,00" class="clean-input" />
+            </div>
+            <div class="input-group">
+              <label>Prazo</label>
+              <input type="date" name="mainGoalDeadline" class="clean-input" />
+            </div>
+            <div class="input-group">
+              <label>Vincular Meta</label>
+              <select name="primaryGoalId" id="primaryGoalSelect" class="clean-input">
+                <option value="">Selecionar...</option>
+              </select>
+            </div>
+            <button type="submit" class="action-btn full">Salvar Alterações</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="institutions" class="screen">
+        <div class="header-row">
+          <h2 class="page-title">Carteiras</h2>
+          <button class="add-btn-mini" id="toggleInstitutionForm"><i class="ph ph-plus"></i></button>
+        </div>
+
+        <div id="institutionFormCard" class="glass-card form-wrapper hidden-panel">
+          <form id="institutionForm">
+            <div class="input-group">
+              <input type="text" name="name" placeholder="Nome da Instituição" required class="clean-input" />
+            </div>
+            <div class="row-2">
+              <select name="type" class="clean-input">
+                <option>Banco Digital</option>
+                <option>Corretora</option>
+                <option>Carteira Física</option>
+                <option>Cripto</option>
+              </select>
+              <select name="liquidity" class="clean-input">
+                <option>D+0</option>
+                <option>D+1</option>
+                <option>D+30</option>
+                <option>Vencimento</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <input type="text" name="yield" placeholder="Rendimento (Ex: 100% CDI)" class="clean-input" />
+            </div>
+            <button type="submit" class="action-btn full">Adicionar</button>
+          </form>
+        </div>
+
+        <div id="institutionsList" class="cards-list"></div>
+      </section>
+
+      <section id="goals" class="screen">
+        <div class="header-row">
+          <h2 class="page-title">Meus Sonhos</h2>
+          <button class="add-btn-mini" id="toggleGoalForm"><i class="ph ph-plus"></i></button>
+        </div>
+
+        <div id="goalFormCard" class="glass-card form-wrapper hidden-panel">
+          <form id="goalForm">
+            <div class="input-group">
+              <input type="text" name="name" placeholder="Nome da Meta" required class="clean-input" />
+            </div>
+            <div class="input-group">
+              <input type="number" name="target" placeholder="Valor Alvo" required class="clean-input" />
+            </div>
+            <div class="row-2">
+              <input type="date" name="due" class="clean-input" />
+              <select name="priority" class="clean-input">
+                <option value="alta">Alta 🔥</option>
+                <option value="média">Média</option>
+                <option value="baixa">Baixa</option>
+              </select>
+            </div>
+            <button type="submit" class="action-btn full">Criar Meta</button>
+          </form>
+        </div>
+
+        <div id="goalsFullList" class="cards-list"></div>
+      </section>
+
+      <section id="entries" class="screen">
+        <h2 class="page-title center-text">Novo Aporte</h2>
+        
+        <form id="entryForm" class="entry-form-modern">
+          <div class="money-input-wrapper">
+            <span class="currency-symbol">R$</span>
+            <input type="number" name="amount" placeholder="0,00" required step="0.01" class="money-input" />
+          </div>
+
+          <div class="glass-card form-wrapper">
+            <div class="input-group">
+              <label>Onde você investiu?</label>
+              <select name="institutionId" id="entryInstitution" required class="clean-input"></select>
+            </div>
+
+            <div class="row-2">
+              <div class="input-group">
+                <label>Data</label>
+                <input type="date" name="date" required class="clean-input" />
+              </div>
+              <div class="input-group">
+                <label>Tipo</label>
+                <select name="assetClass" class="clean-input">
+                  <option>Caixa</option>
+                  <option>Renda Fixa</option>
+                  <option>FIIs</option>
+                  <option>Ações</option>
+                  <option>Cripto</option>
+                  <option>Exterior</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>Vincular a uma meta (opcional)</label>
+              <select name="goalId" id="entryGoal" class="clean-input">
+                <option value="">Apenas guardar (Sem meta)</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <input type="text" name="description" placeholder="Descrição (Ex: Dividendo XP)" class="clean-input" />
+            </div>
+
+            <button type="submit" class="action-btn full pulse">Confirmar Aporte</button>
+          </div>
+        </form>
+
+        <div class="section-title margin-top">
+          <h3>Histórico Recente</h3>
+        </div>
+        <div id="entriesList" class="vertical-list compact"></div>
+      </section>
+
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-section="dashboard">
+        <i class="ph ph-squares-four"></i>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" data-section="institutions">
+        <i class="ph ph-bank"></i>
+        <span>Contas</span>
+      </button>
+      <div class="nav-fab-wrapper">
+        <button class="nav-fab" data-section="entries">
+          <i class="ph ph-plus"></i>
+        </button>
+      </div>
+      <button class="nav-item" data-section="goals">
+        <i class="ph ph-target"></i>
+        <span>Metas</span>
+      </button>
+      <button class="nav-item" data-section="profile">
+        <i class="ph ph-user"></i>
+        <span>Perfil</span>
+      </button>
+    </nav>
+  </div>
+
+  <div id="authModal" class="auth-overlay">
+    <div class="auth-card glass-card">
+      <div class="auth-header">
+        <h2>LifePlan OS</h2>
+        <p>Sua liberdade financeira começa aqui.</p>
+      </div>
+      <form id="authForm">
+        <div class="input-group hidden" id="nameField">
+          <input type="text" name="name" placeholder="Seu Nome" class="clean-input" />
+        </div>
+        <div class="input-group">
+          <input type="email" name="email" placeholder="E-mail" required class="clean-input" />
+        </div>
+        <div class="input-group">
+          <input type="password" name="password" placeholder="Senha" required class="clean-input" />
+        </div>
+        <button type="submit" class="action-btn full" id="authSubmit">Entrar</button>
+      </form>
+      <button id="toggleAuth" class="text-btn">Não tem conta? Crie agora</button>
+    </div>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
