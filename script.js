@@ -38,68 +38,46 @@ let state = {
   institutions: [],
   goals: [],
   entries: [],
-  user: { name: "Planner", email: "" } // Inicializa user seguro
+  user: { name: "Planner", email: "" }
 };
 
 let currentUser = null;
 let authMode = "login";
 
-// --- CORE FUNCTIONS (SAVE & LOAD) ---
+// --- CORE FUNCTIONS ---
 
 async function saveState() {
   if (isConfigured && currentUser?.uid) {
     try {
-      // Salva TUDO no Firestore
       await setDoc(doc(db, "users", currentUser.uid), state, { merge: true });
-      console.log("Dados salvos no Firebase com sucesso.");
     } catch (e) {
-      console.error("Erro ao salvar no Firebase, usando local:", e);
       localStorage.setItem(`lp_data_${currentUser?.email}`, JSON.stringify(state));
     }
   } else {
-    // Modo Local
     localStorage.setItem(`lp_data_${currentUser?.email || 'guest'}`, JSON.stringify(state));
   }
 }
 
 async function loadState(user) {
-  // 1. Carregamento Otimista (Local)
   const local = localStorage.getItem(`lp_data_${user.email}`);
   if (local) state = JSON.parse(local);
 
   if (isConfigured && user.uid) {
     try {
-      // 2. Tenta buscar dados frescos do Firestore
       const docRef = doc(db, "users", user.uid);
       const snap = await getDoc(docRef);
-      
       if (snap.exists()) {
         const data = snap.data();
         state = { ...state, ...data };
-        
-        // CORREÇÃO DO NOME: Se o banco tem nome, usa ele. Se não, tenta o Auth.
         const dbName = data.user?.name;
         const authName = user.displayName;
         const finalName = dbName || authName || state.user?.name || "Planner";
-        
-        state.user = { 
-          uid: user.uid, 
-          email: user.email, 
-          name: finalName 
-        };
-      } else {
-        // Primeiro acesso ou documento não existe
-        state.user = { 
-          uid: user.uid, 
-          email: user.email, 
-          name: user.displayName || "Planner" 
-        };
+        state.user = { uid: user.uid, email: user.email, name: finalName };
       }
     } catch (e) {
-      console.log("Usando dados locais (Cloud offline ou lento).");
+      console.log("Offline mode active.");
     }
   } else {
-    // Apenas garante objeto user no modo local
     state.user = { uid: user.uid, email: user.email, name: state.user?.name || user.name || "Planner" };
   }
 }
@@ -184,9 +162,7 @@ function renderInstitutions() {
 function hydrateProfile() {
   const form = selectors("profileForm");
   if(!form) return;
-  // Preenche nome
   if(form.userName) form.userName.value = state.user?.name || "";
-  
   form.income.value = state.profile.income || "";
   form.expenses.value = state.profile.expenses || "";
   form.mainGoalName.value = state.profile.mainGoalName || "";
@@ -210,8 +186,6 @@ function renderApp() {
   });
 
   if(selectors("totalBalance")) selectors("totalBalance").textContent = formatCurrency(total);
-  
-  // NOME NO CABEÇALHO (Usa state.user.name, que agora é robusto)
   const displayName = state.user?.name?.split(" ")[0] || "Planner";
   if(selectors("userGreeting")) selectors("userGreeting").textContent = displayName;
   if(selectors("headerAvatar")) selectors("headerAvatar").textContent = displayName.charAt(0).toUpperCase();
@@ -232,16 +206,62 @@ function renderApp() {
   if (goalSelect) goalSelect.innerHTML = `<option value="">Apenas guardar (Sem meta)</option>` + goalOpts;
   if (bindSelect) bindSelect.innerHTML = `<option value="">Selecionar...</option>` + goalOpts;
   
-  // Salva a cada renderização para garantir consistência
   saveState();
   checkOnboarding();
 }
 
+// --- ONBOARDING LOGIC (AGORA EXISTE!) ---
 function checkOnboarding() {
+  // Se renda for 0, mostra modal
   if (state.profile.income === 0) {
     selectors("onboardingModal").classList.remove("hidden");
   } else {
     selectors("onboardingModal").classList.add("hidden");
+  }
+}
+
+function setupOnboarding() {
+  const btnStep1 = selectors("btnStep1");
+  const btnFinish = selectors("btnFinishOnboarding");
+
+  if(btnStep1) {
+    btnStep1.addEventListener("click", () => {
+      console.log("Clique no Passo 1");
+      const name = selectors("obGoalName").value;
+      const target = selectors("obGoalTarget").value;
+      
+      if(name && target) {
+        // Cria a meta
+        state.goals.push({ id: crypto.randomUUID(), name, target: Number(target), priority: "alta", due: "" });
+        state.profile.mainGoalName = name;
+        state.profile.mainGoalTarget = Number(target);
+        
+        // Troca de tela
+        selectors("step1").classList.remove("active");
+        selectors("step2").classList.add("active");
+      } else {
+        alert("Por favor, preencha o nome da meta e o valor alvo.");
+      }
+    });
+  }
+
+  if(btnFinish) {
+    btnFinish.addEventListener("click", () => {
+      console.log("Clique no Finalizar");
+      const inc = selectors("obIncome").value;
+      const exp = selectors("obExpenses").value;
+      
+      if(inc && exp) {
+        state.profile.income = Number(inc);
+        state.profile.expenses = Number(exp);
+        
+        saveState(); // Salva tudo
+        renderApp(); // Atualiza tela
+        selectors("onboardingModal").classList.add("hidden"); // Fecha modal
+      } else {
+        alert("Por favor, informe sua renda e despesas.");
+      }
+    });
   }
 }
 
@@ -277,11 +297,8 @@ function setupForms() {
       e.preventDefault();
       const fd = new FormData(e.target);
       callback(Object.fromEntries(fd));
-      // Não reseta o form de perfil para manter os dados visíveis
-      if (id !== "profileForm") e.target.reset(); 
-      
+      if (id !== "profileForm") e.target.reset();
       renderApp();
-      
       if(id === "institutionForm") selectors("institutionFormCard").style.display = "none";
       if(id === "goalForm") selectors("goalFormCard").style.display = "none";
       if(id === "entryForm") document.querySelector('[data-section="dashboard"]').click();
@@ -292,7 +309,6 @@ function setupForms() {
   handleForm("goalForm", (data) => state.goals.push({ ...data, id: crypto.randomUUID(), target: Number(data.target) }));
   handleForm("entryForm", (data) => state.entries.push({ ...data, id: crypto.randomUUID(), amount: Number(data.amount) }));
   
-  // HANDLER ESPECIAL DO PERFIL (Salva Nome)
   handleForm("profileForm", (data) => {
     state.profile = { 
       income: Number(data.income),
@@ -301,16 +317,12 @@ function setupForms() {
       mainGoalTarget: Number(data.mainGoalTarget),
       mainGoalDeadline: data.mainGoalDeadline
     };
-    
-    // Atualiza nome se fornecido
     if(data.userName) {
       state.user.name = data.userName;
-      // Tenta atualizar Auth se possível
       if(isConfigured && auth && auth.currentUser) {
         updateProfile(auth.currentUser, { displayName: data.userName }).catch(err => console.log(err));
       }
     }
-    
     alert("Perfil e nome atualizados!");
   });
 }
@@ -341,7 +353,6 @@ function setupAuth() {
     const email = data.get("email");
     const pass = data.get("password");
 
-    // MODO LOCAL
     if (!isConfigured) {
       setTimeout(async () => {
         currentUser = { uid: "local-user", email, name: data.get("name") || "Local User" };
@@ -353,7 +364,6 @@ function setupAuth() {
       return;
     }
 
-    // MODO FIREBASE
     try {
       let uc;
       if (authMode === "login") uc = await signInWithEmailAndPassword(auth, email, pass);
@@ -362,10 +372,7 @@ function setupAuth() {
         if (data.get("name")) updateProfile(uc.user, { displayName: data.get("name") });
       }
       currentUser = uc.user;
-      
-      // Salva sessão local para pular login no refresh
       localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ uid: currentUser.uid, email: currentUser.email, name: currentUser.displayName }));
-      
       await loadState(currentUser);
       renderApp();
       modal.style.display = "none";
@@ -384,26 +391,23 @@ function setupAuth() {
   });
 }
 
-// --- BOOTSTRAP ---
 function init() {
   setupNavigation();
   setupForms();
   setupAuth();
+  setupOnboarding(); // <--- AQUI ESTAVA FALTANDO ANTES
   
   if (isConfigured) {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         currentUser = user;
-        // Atualiza sessão local caso tenha mudado algo
         localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ uid: user.uid, email: user.email, name: user.displayName }));
         await loadState(user);
         renderApp();
         selectors("authModal").style.display = "none";
       } else {
-         // Se não tiver user no Firebase Auth, verifica se tem sessão local "viva" (para casos de offline/refresh rápido)
          const savedUser = localStorage.getItem(LOCAL_SESSION_KEY);
          if (savedUser && !auth.currentUser) {
-            // Pequeno delay para dar chance ao Firebase conectar, se não, usa local
             setTimeout(() => {
                 if(!auth.currentUser) selectors("authModal").style.display = "grid";
             }, 500);
@@ -413,7 +417,6 @@ function init() {
       }
     });
   } else {
-    // Modo Local Puro
     const savedUser = localStorage.getItem(LOCAL_SESSION_KEY);
     if (savedUser) {
       currentUser = JSON.parse(savedUser);
