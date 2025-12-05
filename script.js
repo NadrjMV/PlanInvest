@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/fireba
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 
-console.log("LifePlan v2.0 Iniciando...");
+console.log("LifePlan v3.2 (Firebase Fix) Iniciando...");
 
 // --- CONFIGURAÇÃO FIREBASE ---
 const firebaseConfig = {
@@ -15,7 +15,9 @@ const firebaseConfig = {
   measurementId: "G-YGHGXQY05J"
 };
 
-const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "AIzaSyAZilONHJurs2w8M-sIMm5Xrahzr654KwY";
+// CORREÇÃO AQUI: Verificamos se a chave NÃO é o placeholder genérico.
+// Como sua chave é real, isso agora vai dar TRUE.
+const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
 let app, auth, db;
 
 if (isConfigured) {
@@ -23,9 +25,12 @@ if (isConfigured) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+    console.log("Firebase conectado com sucesso!");
   } catch (e) {
-    console.warn("Erro init Firebase:", e);
+    console.error("Erro crítico ao iniciar Firebase:", e);
   }
+} else {
+  console.warn("ALERTA: Firebase não detectado. Rodando em modo local.");
 }
 
 // --- ESTADO & CONSTANTES ---
@@ -50,7 +55,9 @@ async function saveState() {
   if (isConfigured && currentUser?.uid) {
     try {
       await setDoc(doc(db, "users", currentUser.uid), state, { merge: true });
+      console.log("Estado salvo no Firestore.");
     } catch (e) {
+      console.error("Erro ao salvar no Firestore (fallback local):", e);
       localStorage.setItem(`lp_data_${currentUser?.email}`, JSON.stringify(state));
     }
   } else {
@@ -59,25 +66,30 @@ async function saveState() {
 }
 
 async function loadState(user) {
+  // 1. Carregamento Otimista (Cache Local)
   const local = localStorage.getItem(`lp_data_${user.email}`);
   if (local) state = JSON.parse(local);
 
   if (isConfigured && user.uid) {
     try {
+      // 2. Busca na nuvem
       const docRef = doc(db, "users", user.uid);
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const data = snap.data();
         state = { ...state, ...data };
+        
+        // Prioridade de nomes: Banco > Auth > State > Padrão
         const dbName = data.user?.name;
         const authName = user.displayName;
         const finalName = dbName || authName || state.user?.name || "Planner";
         state.user = { uid: user.uid, email: user.email, name: finalName };
       }
     } catch (e) {
-      console.log("Offline mode active.");
+      console.warn("Modo Offline ativo ou erro de rede:", e);
     }
   } else {
+    // Fallback puro
     state.user = { uid: user.uid, email: user.email, name: state.user?.name || user.name || "Planner" };
   }
 }
@@ -210,9 +222,8 @@ function renderApp() {
   checkOnboarding();
 }
 
-// --- ONBOARDING LOGIC (AGORA EXISTE!) ---
+// --- ONBOARDING LOGIC ---
 function checkOnboarding() {
-  // Se renda for 0, mostra modal
   if (state.profile.income === 0) {
     selectors("onboardingModal").classList.remove("hidden");
   } else {
@@ -226,40 +237,32 @@ function setupOnboarding() {
 
   if(btnStep1) {
     btnStep1.addEventListener("click", () => {
-      console.log("Clique no Passo 1");
       const name = selectors("obGoalName").value;
       const target = selectors("obGoalTarget").value;
-      
       if(name && target) {
-        // Cria a meta
         state.goals.push({ id: crypto.randomUUID(), name, target: Number(target), priority: "alta", due: "" });
         state.profile.mainGoalName = name;
         state.profile.mainGoalTarget = Number(target);
-        
-        // Troca de tela
         selectors("step1").classList.remove("active");
         selectors("step2").classList.add("active");
       } else {
-        alert("Por favor, preencha o nome da meta e o valor alvo.");
+        alert("Preencha os campos!");
       }
     });
   }
 
   if(btnFinish) {
     btnFinish.addEventListener("click", () => {
-      console.log("Clique no Finalizar");
       const inc = selectors("obIncome").value;
       const exp = selectors("obExpenses").value;
-      
       if(inc && exp) {
         state.profile.income = Number(inc);
         state.profile.expenses = Number(exp);
-        
-        saveState(); // Salva tudo
-        renderApp(); // Atualiza tela
-        selectors("onboardingModal").classList.add("hidden"); // Fecha modal
+        saveState();
+        renderApp();
+        selectors("onboardingModal").classList.add("hidden");
       } else {
-        alert("Por favor, informe sua renda e despesas.");
+        alert("Preencha os valores!");
       }
     });
   }
@@ -345,7 +348,7 @@ function setupAuth() {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const originalText = submitBtn.textContent;
-    submitBtn.textContent = "Processando...";
+    submitBtn.textContent = "Conectando...";
     submitBtn.classList.add("pulse-opacity");
     submitBtn.disabled = true;
 
@@ -353,6 +356,7 @@ function setupAuth() {
     const email = data.get("email");
     const pass = data.get("password");
 
+    // FALLBACK (Se config estiver errada)
     if (!isConfigured) {
       setTimeout(async () => {
         currentUser = { uid: "local-user", email, name: data.get("name") || "Local User" };
@@ -395,28 +399,32 @@ function init() {
   setupNavigation();
   setupForms();
   setupAuth();
-  setupOnboarding(); // <--- AQUI ESTAVA FALTANDO ANTES
+  setupOnboarding();
   
   if (isConfigured) {
     onAuthStateChanged(auth, async (user) => {
       if (user) {
+        // --- SUCESSO NO LOGIN AUTOMÁTICO ---
         currentUser = user;
         localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({ uid: user.uid, email: user.email, name: user.displayName }));
         await loadState(user);
         renderApp();
         selectors("authModal").style.display = "none";
       } else {
+         // Verifica se tem sessão salva localmente antes de mostrar login
          const savedUser = localStorage.getItem(LOCAL_SESSION_KEY);
          if (savedUser && !auth.currentUser) {
+            // Dá um tempinho pro Firebase conectar (Cold Start)
             setTimeout(() => {
                 if(!auth.currentUser) selectors("authModal").style.display = "grid";
-            }, 500);
+            }, 800);
          } else {
             selectors("authModal").style.display = "grid";
          }
       }
     });
   } else {
+    // Modo Offline
     const savedUser = localStorage.getItem(LOCAL_SESSION_KEY);
     if (savedUser) {
       currentUser = JSON.parse(savedUser);
