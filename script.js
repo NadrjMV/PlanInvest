@@ -160,9 +160,21 @@ async function checkRecurringEntries() {
   const currentDay = today.getDate();
   let addedCount = 0;
 
+  const existingRecurrences = new Set(
+  state.entries
+    .filter(e => e.isRecurring) // Filtro só os que são recorrentes para otimizar o Set
+    .map(e => {
+      const date = new Date(e.date);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      return `${e.originId}-${year}-${month}`;
+    })
+);
+
   for (const sub of state.subscriptions) {
+    const checkKey = `${sub.id}-${currentYear}-${currentMonth}`;
     // Se o dia do vencimento já passou ou é hoje
-    if (currentDay >= Number(sub.day)) {
+    if (currentDay >= Number(sub.day) && !existingRecurrences.has(checkKey)) {
       // Verifica se já existe lançamento deste fixo neste mês/ano
       // Usamos um ID composto ou flag 'originId'
       const alreadyExists = state.entries.some(e => 
